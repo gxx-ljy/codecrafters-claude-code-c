@@ -55,6 +55,7 @@ int main(int argc, char *argv[]) {
     cJSON *file_path = cJSON_AddObjectToObject(properties, "file_path");
     cJSON_AddStringToObject(file_path, "type", "string");
     cJSON_AddStringToObject(file_path, "description", "The path to the file to read");
+    cJSON_AddItemToArray(tools, tool);
 
     while (1) { 
         cJSON *req = cJSON_CreateObject();
@@ -151,16 +152,18 @@ int main(int argc, char *argv[]) {
                         // printf("%s", fbuf);
 
                         cJSON *msg = cJSON_CreateObject();
+                        const char *tc_id = cJSON_GetStringValue(cJSON_GetObjectItem(tc, "id"));
                         cJSON_AddStringToObject(msg, "role", "tool");
-                        cJSON_AddStringToObject(msg, "tool_call_id", cJSON_GetStringValue(cJSON_GetObjectItem(tc, "id")));
+                        cJSON_AddStringToObject(msg, "tool_call_id", tc_id);
                         cJSON_AddStringToObject(msg, "content", fbuf);
                         cJSON_AddItemToArray(messages, msg);
                         free(fbuf);
                         cJSON_Delete(args);
                     }
                 }
-                cJSON_Delete(json);
             }
+            cJSON_Delete(json);
+            continue;
         } else {
             cJSON *content = cJSON_GetObjectItem(message, "content");
             printf("%s", cJSON_GetStringValue(content));
