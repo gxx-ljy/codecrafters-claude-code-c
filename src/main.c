@@ -43,10 +43,12 @@ int main(int argc, char *argv[]) {
     cJSON_AddStringToObject(msg, "role", "user");
     cJSON_AddStringToObject(msg, "content", prompt);
     cJSON_AddItemToArray(messages, msg);
+
     cJSON *tools = cJSON_CreateArray();
-    cJSON *tool = cJSON_CreateObject();
-    cJSON_AddStringToObject(tool, "type", "function");
-    cJSON *fn_read = cJSON_AddObjectToObject(tool, "function");
+
+    cJSON *read_tool = cJSON_CreateObject();
+    cJSON_AddStringToObject(read_tool, "type", "function");
+    cJSON *fn_read = cJSON_AddObjectToObject(read_tool, "function");
     cJSON_AddStringToObject(fn_read, "name", "Read");
     cJSON_AddStringToObject(fn_read, "description", "Read and return the contents of a file");
     cJSON *params = cJSON_AddObjectToObject(fn_read, "parameters");
@@ -58,8 +60,10 @@ int main(int argc, char *argv[]) {
     cJSON *file_path = cJSON_AddObjectToObject(properties, "file_path");
     cJSON_AddStringToObject(file_path, "type", "string");
     cJSON_AddStringToObject(file_path, "description", "The path to the file to read");
+    cJSON_AddItemToArray(tools, read_tool);
     
-    cJSON *fn_write = cJSON_AddObjectToObject(tool, "function");
+    cJSON *write_tool = cJSON_CreateObject();
+    cJSON *fn_write = cJSON_AddObjectToObject(write_tool, "function");
     cJSON_AddStringToObject(fn_write, "name", "Write");
     cJSON_AddStringToObject(fn_write, "description", "Write content to a file");
     cJSON *write_params = cJSON_AddObjectToObject(fn_write, "parameters");
@@ -76,7 +80,7 @@ int main(int argc, char *argv[]) {
     cJSON_AddStringToObject(write_content, "type", "string");
     cJSON_AddStringToObject(write_content, "description", "The content to write to the file");
 
-    cJSON_AddItemToArray(tools, tool);
+    cJSON_AddItemToArray(tools, write_tool);
 
     while (1) { 
         cJSON *req = cJSON_CreateObject();
