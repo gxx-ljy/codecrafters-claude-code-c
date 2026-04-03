@@ -80,8 +80,23 @@ int main(int argc, char *argv[]) {
     cJSON *write_content = cJSON_AddObjectToObject(write_properties, "content");
     cJSON_AddStringToObject(write_content, "type", "string");
     cJSON_AddStringToObject(write_content, "description", "The content to write to the file");
-
     cJSON_AddItemToArray(tools, write_tool);
+
+    cJSON *bash_tool = cJSON_CreateObject();
+    cJSON_AddStringToObject(bash_tool, "type", "function");
+    cJSON *fn_bash = cJSON_AddObjectToObject(bash_tool, "function");
+    cJSON_AddStringToObject(fn_bash, "name", "Bash");
+    cJSON_AddStringToObject(fn_bash, "description", "Execute a shell command");
+    cJSON *bash_params = cJSON_AddObjectToObject(fn_bash, "parameters");
+    cJSON_AddStringToObject(bash_params, "type", "object");
+    cJSON *bash_required = cJSON_CreateArray();
+    cJSON_AddItemToArray(bash_required, cJSON_CreateString("command"));
+    cJSON_AddItemToObject(bash_params, "required", bash_required);
+    cJSON *bash_properties = cJSON_AddObjectToObject(bash_params, "properties");
+    cJSON *bash_command = cJSON_AddObjectToObject(bash_properties, "command");
+    cJSON_AddStringToObject(bash_command, "type", "string");
+    cJSON_AddStringToObject(bash_command, "description", "The command to execute");
+    cJSON_AddItemToArray(tools, bash_tool);
 
     while (1) { 
         cJSON *req = cJSON_CreateObject();
@@ -214,8 +229,35 @@ int main(int argc, char *argv[]) {
                         cJSON_Delete(json);
                         return 1;
                     }
+                } else if (func_name && strcmp(func_name, "Bash") == 0 && args_str) {
+                    cJSON *args = cJSON_Parse(args_str);
+                    const char *command = cJSON_GetStringValue(cJSON_GetObjectItem(args, "command"));
+                    if (command) {
+                        FILE *fp = popen(command, "r");
+                        if (!fp) {
+                            fprintf(stderr, "Bash: failed to execute command\n");
+                            cJSON_Delete(args);
+                            cJSON_Delete(json);
+                            return 1;
+                        }
+                        char buf[1024];
+                        size_t n = fread(buf, 1, sizeof(buf) - 1, fp);
+                        pclose(fp);
+                        buf[n] = '\0';
+
+                        cJSON *msg = cJSON_CreateObject();
+                        const char *tc_id = cJSON_GetStringValue(cJSON_GetObjectItem(tc, "id"));
+                        cJSON_AddStringToObject(msg, "role", "tool");
+                        cJSON_AddStringToObject(msg, "tool_call_id", tc_id);
+                        cJSON_AddStringToObject(msg, "content", buf);
+                        cJSON_AddItemToArray(messages, msg);
+                    } else {
+                        fprintf(stderr, "Bash: invalid arguments\n");
+                        cJSON_Delete(args);
+                        cJSON_Delete(json);
+                        return 1;
+                    }
                 }
-                
             }
             cJSON_Delete(json);
             continue;
