@@ -57,7 +57,11 @@ int main(int argc, char *argv[]) {
     cJSON *file_path = cJSON_AddObjectToObject(properties, "file_path");
     cJSON_AddStringToObject(file_path, "type", "string");
     cJSON_AddStringToObject(file_path, "description", "The path to the file to read");
-    cJSON_AddStringToObject(params, "required", true);
+    cJSON *required = cJSON_CreateArray();
+    cJSON_AddItemToArray(required, cJSON_CreateString("file_path"));
+    cJSON_AddItemToObject(params, "required", required);
+    cJSON_AddItemToArray(tools, tool);
+
 
     char *body = cJSON_PrintUnformatted(req);
     cJSON_Delete(req);
