@@ -114,13 +114,44 @@ int main(int argc, char *argv[]) {
 
     cJSON *first = cJSON_GetArrayItem(choices, 0);
     cJSON *message = cJSON_GetObjectItem(first, "message");
-    cJSON *content = cJSON_GetObjectItem(message, "content");
 
     // You can use print statements as follows for debugging, they'll be visible when running tests.
     fprintf(stderr, "Logs from your program will appear here!\n");
 
-    // TODO: Uncomment the line below to pass the first stage
-    printf("%s", cJSON_GetStringValue(content));
+    cJSON *tool_calls = cJSON_GetObjectItem(message, "tool_calls");
+    if (cJSON_IsArray(tool_calls) && cJSON_GetArraySize(tool_calls) > 0){
+        cJSON *tc = cJSON_GetArrayItem(tool_calls, 0);
+        cJSON *tc_func = cJSON_GetObjectItem(tc, "function");
+        const char *func_name = cJSON_GetStringValue(cJSON_GetObjectItem(tc_func, "name"));
+        const char *args_str = cJSON_GetStringValue(cJSON_GetObjectItem(tc_func, "arguments"));
+
+        if (func_name && strcmp(func_name, "Read") == 0 && args_str) {
+            cJSON *args = cJSON_Parse(args_str);
+            const char *file_path = cJSON_GetStringValue(cJSON_GetObjectItem(args, "file_path"));
+            if (file_path) {
+                FILE *f = fopen(file_path, "rb");
+                if (!f) {
+                    fprintf(stderr, "Read: cannot open file: %s\n", file_path);
+                    cJSON_Delete(args);
+                    cJSON_Delete(json);
+                    return 1;
+                }
+                fseek(f, 0, SEEK_END);
+                long fsize = ftell(f);
+                fseek(f, 0, SEEK_SET);
+                char *fbuf = malloc(fsize + 1);
+                fread(fbuf, 1, fsize, f);
+                fclose(f);
+                fbuf[fsize] = '\0';
+                printf("%s", fbuf);
+                free(fbuf);
+            }
+            cJSON_Delete(args);
+        }
+    } else {
+        cJSON *content = cJSON_GetObjectItem(message, "content");
+        printf("%s", cJSON_GetStringValue(content));
+    }
 
     cJSON_Delete(json);
     return 0;
