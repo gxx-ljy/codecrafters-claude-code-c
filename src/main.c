@@ -63,6 +63,7 @@ int main(int argc, char *argv[]) {
     cJSON_AddItemToArray(tools, read_tool);
     
     cJSON *write_tool = cJSON_CreateObject();
+    cJSON_AddStringToObject(write_tool, "type", "function");
     cJSON *fn_write = cJSON_AddObjectToObject(write_tool, "function");
     cJSON_AddStringToObject(fn_write, "name", "Write");
     cJSON_AddStringToObject(fn_write, "description", "Write content to a file");
