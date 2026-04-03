@@ -45,6 +45,19 @@ int main(int argc, char *argv[]) {
     cJSON_AddStringToObject(msg, "role", "user");
     cJSON_AddStringToObject(msg, "content", prompt);
     cJSON_AddItemToArray(messages, msg);
+    cJSON *tools = cJSON_AddArrayToObject(req, "tools");
+    cJSON *tool = cJSON_CreateObject();
+    cJSON_AddStringToObject(tool, "type", "function");
+    cJSON *function = cJSON_AddObjectToObject(tool, "function");
+    cJSON_AddStringToObject(function, "name", "Read");
+    cJSON_AddStringToObject(function, "description", "Read and return the contents of a file");
+    cJSON *params = cJSON_AddObjectToObject(function, "parameters");
+    cJSON_AddStringToObject(params, "type", "object");
+    cJSON *properties = cJSON_AddObjectToObject(params, "properties");
+    cJSON *file_path = cJSON_AddObjectToObject(properties, "file_path");
+    cJSON_AddStringToObject(file_path, "type", "string");
+    cJSON_AddStringToObject(file_path, "description", "The path to the file to read");
+    cJSON_AddStringToObject(params, "required", true);
 
     char *body = cJSON_PrintUnformatted(req);
     cJSON_Delete(req);
