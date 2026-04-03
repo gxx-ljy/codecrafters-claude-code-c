@@ -38,14 +38,12 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    cJSON *req = cJSON_CreateObject();
-    cJSON_AddStringToObject(req, "model", "anthropic/claude-haiku-4.5");
-    cJSON *messages = cJSON_AddArrayToObject(req, "messages");
+    cJSON *messages = cJSON_CreateArray();
     cJSON *msg = cJSON_CreateObject();
     cJSON_AddStringToObject(msg, "role", "user");
     cJSON_AddStringToObject(msg, "content", prompt);
     cJSON_AddItemToArray(messages, msg);
-    cJSON *tools = cJSON_AddArrayToObject(req, "tools");
+    cJSON *tools = cJSON_CreateArray();
     cJSON *tool = cJSON_CreateObject();
     cJSON_AddStringToObject(tool, "type", "function");
     cJSON *function = cJSON_AddObjectToObject(tool, "function");
@@ -57,114 +55,120 @@ int main(int argc, char *argv[]) {
     cJSON *file_path = cJSON_AddObjectToObject(properties, "file_path");
     cJSON_AddStringToObject(file_path, "type", "string");
     cJSON_AddStringToObject(file_path, "description", "The path to the file to read");
-    cJSON *required = cJSON_CreateArray();
-    cJSON_AddItemToArray(required, cJSON_CreateString("file_path"));
-    cJSON_AddItemToObject(params, "required", required);
-    cJSON_AddItemToArray(tools, tool);
 
+    while (1) { 
+        cJSON *req = cJSON_CreateObject();
+        cJSON_AddStringToObject(req, "model", "anthropic/claude-haiku-4.5");
+        cJSON_AddItemReferenceToObject(req, "messages", messages);
+        cJSON_AddItemReferenceToObject(req, "tools", tools);
 
-    char *body = cJSON_PrintUnformatted(req);
-    cJSON_Delete(req);
+        char *body = cJSON_PrintUnformatted(req);
+        // cJSON_Delete(req);
 
-    char url[512];
-    snprintf(url, sizeof(url), "%s/chat/completions", base_url);
+        char url[512];
+        snprintf(url, sizeof(url), "%s/chat/completions", base_url);
 
-    char auth_header[512];
-    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
+        char auth_header[512];
+        snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
 
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-    CURL *curl = curl_easy_init();
-    struct response_buf resp = {NULL, 0};
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-    headers = curl_slist_append(headers, auth_header);
+        curl_global_init(CURL_GLOBAL_DEFAULT);
+        CURL *curl = curl_easy_init();
+        struct response_buf resp = {NULL, 0};
+        struct curl_slist *headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+        headers = curl_slist_append(headers, auth_header);
 
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_response);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_response);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
 
-    CURLcode res = curl_easy_perform(curl);
+        CURLcode res = curl_easy_perform(curl);
 
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
-    curl_global_cleanup();
-    free(body);
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+        curl_global_cleanup();
+        free(body);
 
-    if (res != CURLE_OK) {
-        fprintf(stderr, "curl error: %s\n", curl_easy_strerror(res));
-        free(resp.data);
-        return 1;
-    }
-
-    cJSON *json = cJSON_Parse(resp.data);
-    free(resp.data);
-    if (!json) {
-        fprintf(stderr, "Failed to parse response JSON\n");
-        return 1;
-    }
-
-    cJSON *choices = cJSON_GetObjectItem(json, "choices");
-    if (!cJSON_IsArray(choices) || cJSON_GetArraySize(choices) == 0) {
-        fprintf(stderr, "no choices in response\n");
-        cJSON_Delete(json);
-        return 1;
-    }
-
-    cJSON *first = cJSON_GetArrayItem(choices, 0);
-    cJSON *message = cJSON_GetObjectItem(first, "message");
-
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    fprintf(stderr, "Logs from your program will appear here!\n");
-
-    cJSON *tool_calls = cJSON_GetObjectItem(message, "tool_calls");
-    if (cJSON_IsArray(tool_calls) && cJSON_GetArraySize(tool_calls) > 0){
-        for (int i = 0; i < cJSON_GetArraySize(tool_calls); i++) {
-            cJSON *tc = cJSON_GetArrayItem(tool_calls, i);
-            cJSON *tc_func = cJSON_GetObjectItem(tc, "function");
-            const char *func_name = cJSON_GetStringValue(cJSON_GetObjectItem(tc_func, "name"));
-            const char *args_str = cJSON_GetStringValue(cJSON_GetObjectItem(tc_func, "arguments"));
-
-            if (func_name && strcmp(func_name, "Read") == 0 && args_str) {
-                cJSON *args = cJSON_Parse(args_str);
-                const char *file_path = cJSON_GetStringValue(cJSON_GetObjectItem(args, "file_path"));
-                if (file_path) {
-                    FILE *f = fopen(file_path, "rb");
-                    if (!f) {
-                        fprintf(stderr, "Read: cannot open file: %s\n", file_path);
-                        cJSON_Delete(args);
-                        cJSON_Delete(json);
-                        return 1;
-                    }
-                    fseek(f, 0, SEEK_END);
-                    long fsize = ftell(f);
-                    fseek(f, 0, SEEK_SET);
-                    char *fbuf = malloc(fsize + 1);
-                    fread(fbuf, 1, fsize, f);
-                    fclose(f);
-                    fbuf[fsize] = '\0';
-                    printf("%s", fbuf);
-
-                    cJSON *msg = cJSON_CreateObject();
-                    cJSON_AddStringToObject(msg, "role", "tool");
-                    cJSON_AddStringToObject(msg, "tool_call_id", cJSON_GetStringValue(cJSON_GetObjectItem(tc, "id")));
-                    cJSON_AddStringToObject(msg, "content", fbuf);
-                    cJSON_AddItemToArray(messages, msg);
-                    free(fbuf);
-                }
-            }
-            cJSON_Delete(args);
+        if (res != CURLE_OK) {
+            fprintf(stderr, "curl error: %s\n", curl_easy_strerror(res));
+            free(resp.data);
+            return 1;
         }
-    } else {
-        cJSON *content = cJSON_GetObjectItem(message, "content");
-        printf("%s", cJSON_GetStringValue(content));
-        cJSON *msg = cJSON_CreateObject();
-        cJSON_AddStringToObject(msg, "role", "assistant");
-        cJSON_AddStringToObject(msg, "content", cJSON_GetStringValue(content));
-        cJSON_AddItemToArray(messages, msg);
-    }
 
-    cJSON_Delete(json);
+        cJSON *json = cJSON_Parse(resp.data);
+        free(resp.data);
+        if (!json) {
+            fprintf(stderr, "Failed to parse response JSON\n");
+            cJSON_Delete(messages);
+            cJSON_Delete(tools);
+            return 1;
+        }
+
+        cJSON *choices = cJSON_GetObjectItem(json, "choices");
+        if (!cJSON_IsArray(choices) || cJSON_GetArraySize(choices) == 0) {
+            fprintf(stderr, "no choices in response\n");
+            cJSON_Delete(json);
+            cJSON_Delete(messages);
+            cJSON_Delete(tools);
+            return 1;
+        }
+
+        cJSON *first = cJSON_GetArrayItem(choices, 0);
+        cJSON *message = cJSON_GetObjectItem(first, "message");
+        // fprintf(stderr, "Logs from your program will appear here!\n")
+
+        cJSON *assistant_msg = cJSON_Duplicate(message, 1);
+        cJSON_AddItemToArray(messages, assistant_msg);
+
+        cJSON *tool_calls = cJSON_GetObjectItem(message, "tool_calls");
+        if (cJSON_IsArray(tool_calls) && cJSON_GetArraySize(tool_calls) > 0){
+            for (int i = 0; i < cJSON_GetArraySize(tool_calls); i++) {
+                cJSON *tc = cJSON_GetArrayItem(tool_calls, i);
+                cJSON *tc_func = cJSON_GetObjectItem(tc, "function");
+                const char *func_name = cJSON_GetStringValue(cJSON_GetObjectItem(tc_func, "name"));
+                const char *args_str = cJSON_GetStringValue(cJSON_GetObjectItem(tc_func, "arguments"));
+
+                if (func_name && strcmp(func_name, "Read") == 0 && args_str) {
+                    cJSON *args = cJSON_Parse(args_str);
+                    const char *file_path = cJSON_GetStringValue(cJSON_GetObjectItem(args, "file_path"));
+                    if (file_path) {
+                        FILE *f = fopen(file_path, "rb");
+                        if (!f) {
+                            fprintf(stderr, "Read: cannot open file: %s\n", file_path);
+                            cJSON_Delete(args);
+                            cJSON_Delete(json);
+                            return 1;
+                        }
+                        fseek(f, 0, SEEK_END);
+                        long fsize = ftell(f);
+                        fseek(f, 0, SEEK_SET);
+                        char *fbuf = malloc(fsize + 1);
+                        fread(fbuf, 1, fsize, f);
+                        fclose(f);
+                        fbuf[fsize] = '\0';
+                        // printf("%s", fbuf);
+
+                        cJSON *msg = cJSON_CreateObject();
+                        cJSON_AddStringToObject(msg, "role", "tool");
+                        cJSON_AddStringToObject(msg, "tool_call_id", cJSON_GetStringValue(cJSON_GetObjectItem(tc, "id")));
+                        cJSON_AddStringToObject(msg, "content", fbuf);
+                        cJSON_AddItemToArray(messages, msg);
+                        free(fbuf);
+                        cJSON_Delete(args);
+                    }
+                }
+                cJSON_Delete(json);
+            }
+        } else {
+            cJSON *content = cJSON_GetObjectItem(message, "content");
+            printf("%s", cJSON_GetStringValue(content));
+            cJSON_Delete(json);
+            cJSON_Delete(messages);
+            cJSON_Delete(tools);
+            return 0;
+        }
+    }
     return 0;
 }
