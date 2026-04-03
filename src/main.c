@@ -46,15 +46,36 @@ int main(int argc, char *argv[]) {
     cJSON *tools = cJSON_CreateArray();
     cJSON *tool = cJSON_CreateObject();
     cJSON_AddStringToObject(tool, "type", "function");
-    cJSON *function = cJSON_AddObjectToObject(tool, "function");
-    cJSON_AddStringToObject(function, "name", "Read");
-    cJSON_AddStringToObject(function, "description", "Read and return the contents of a file");
-    cJSON *params = cJSON_AddObjectToObject(function, "parameters");
+    cJSON *fn_read = cJSON_AddObjectToObject(tool, "function");
+    cJSON_AddStringToObject(fn_read, "name", "Read");
+    cJSON_AddStringToObject(fn_read, "description", "Read and return the contents of a file");
+    cJSON *params = cJSON_AddObjectToObject(fn_read, "parameters");
     cJSON_AddStringToObject(params, "type", "object");
+    cJSON *required = cJSON_CreateArray();
+    cJSON_AddItemToArray(required, cJSON_CreateString("file_path"));
+    cJSON_AddItemToObject(params, "required", required);
     cJSON *properties = cJSON_AddObjectToObject(params, "properties");
     cJSON *file_path = cJSON_AddObjectToObject(properties, "file_path");
     cJSON_AddStringToObject(file_path, "type", "string");
     cJSON_AddStringToObject(file_path, "description", "The path to the file to read");
+    
+    cJSON *fn_write = cJSON_AddObjectToObject(tool, "function");
+    cJSON_AddStringToObject(fn_write, "name", "Write");
+    cJSON_AddStringToObject(fn_write, "description", "Write content to a file");
+    cJSON *write_params = cJSON_AddObjectToObject(fn_write, "parameters");
+    cJSON_AddStringToObject(write_params, "type", "object");
+    cJSON *write_required = cJSON_CreateArray();
+    cJSON_AddItemToArray(write_required, cJSON_CreateString("file_path"));
+    cJSON_AddItemToArray(write_required, cJSON_CreateString("content"));
+    cJSON_AddItemToObject(write_params, "required", write_required);
+    cJSON *write_properties = cJSON_AddObjectToObject(write_params, "properties");
+    cJSON *write_file_path = cJSON_AddObjectToObject(write_properties, "file_path");
+    cJSON_AddStringToObject(write_file_path, "type", "string");
+    cJSON_AddStringToObject(write_file_path, "description", "The path to the file to write");
+    cJSON *write_content = cJSON_AddObjectToObject(write_properties, "content");
+    cJSON_AddStringToObject(write_content, "type", "string");
+    cJSON_AddStringToObject(write_content, "description", "The content to write to the file");
+
     cJSON_AddItemToArray(tools, tool);
 
     while (1) { 
@@ -160,7 +181,36 @@ int main(int argc, char *argv[]) {
                         free(fbuf);
                         cJSON_Delete(args);
                     }
+                } else if (func_name && strcmp(func_name, "Write") == 0 && args_str) {
+                    cJSON *args = cJSON_Parse(args_str);
+                    const char *file_path = cJSON_GetStringValue(cJSON_GetObjectItem(args, "file_path"));
+                    const char *content = cJSON_GetStringValue(cJSON_GetObjectItem(args, "content"));
+                    if (file_path && content) {
+                        FILE *f = fopen(file_path, "wb");
+                        if (!f) {
+                            fprintf(stderr, "Write: cannot open file: %s\n", file_path);
+                            cJSON_Delete(args);
+                            cJSON_Delete(json);
+                            return 1;
+                        }
+                        fwrite(content, strlen(content), 1, f);
+                        fclose(f);
+
+                        cJSON *msg = cJSON_CreateObject();
+                        const char *tc_id = cJSON_GetStringValue(cJSON_GetObjectItem(tc, "id"));
+                        cJSON_AddStringToObject(msg, "role", "tool");
+                        cJSON_AddStringToObject(msg, "tool_call_id", tc_id);
+                        cJSON_AddStringToObject(msg, "content", "File written successfully.");
+                        cJSON_AddItemToArray(messages, msg);
+                        cJSON_Delete(args);
+                    } else {
+                        fprintf(stderr, "Write: invalid arguments\n");
+                        cJSON_Delete(args);
+                        cJSON_Delete(json);
+                        return 1;
+                    }
                 }
+                
             }
             cJSON_Delete(json);
             continue;
